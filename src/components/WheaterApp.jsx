@@ -1,38 +1,76 @@
 import sunny from '../assets/images/sunny.png'
+import cloudy from '../assets/images/cloudy.png'
+import rainy from '../assets/images/rainy.png'
+import snowy from '../assets/images/snowy.png'
+
+import { getWeatherInfo } from '../utils/weatherCode'
 import { useState } from 'react'
 
 const WheatherApp = () => {
 
-//GERENCIAMENTO E CONTROLE DE DADOS E AÇÕES
-
-  // Guarda os dados do clima
   const [data, setData] = useState(null)
+  const [location, setLocation] = useState("")
 
-  // Guarda o nome da cidade digitada
-  const [location, setLocation] = useState('')
+  const handleInputChanges = (e) => {
+    setLocation(e.target.value)
+  }
 
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      search(location)
+    }
+  }
 
-  // Busca as coordenadas da cidade
+  const weatherImages = {
+    sunny,
+    cloudy,
+    rainy,
+    snowy
+  }
+
+  // Background de acordo com o tipo do clima
+  const backgroundImages = {
+    sunny: 'linear-gradient(to right, #f3b07c, #fcd283)',
+    cloudy: 'linear-gradient(to right, #57d6d4, #71eeec)',
+    rainy: 'linear-gradient(to right, #5bc8fb, #80eaff)',
+    snowy: 'linear-gradient(to right, #aff2ff, #fff)'
+  }
+
+  // Background padrão enquanto não existem dados
+  const backgroundImage = data
+    ? backgroundImages[data.weatherType]
+    : backgroundImages.sunny
+
+  const formatDate = (dateTime) => {
+
+    if (!dateTime) {
+      return ''
+    }
+
+    const date = new Date(dateTime)
+
+    return new Intl.DateTimeFormat('pt-BR', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short'
+    }).format(date)
+  }
+
+  // Busca latitude e longitude pelo nome da cidade
   const getCoordinates = async (cityName) => {
 
-    // API que transforma o nome da cidade em latitude e longitude
-    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${cityName}&count=1&language=pt&format=json`
+    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=pt&format=json`
 
-    // Faz a requisição para a API
     const response = await fetch(url)
 
-    // Transforma a resposta em JSON
     const data = await response.json()
 
-    // Verifica se encontrou a cidade
     if (!data.results || data.results.length === 0) {
       throw new Error('Cidade não encontrada')
     }
 
-    // Pega a primeira cidade encontrada
     const city = data.results[0]
 
-    // Retorna somente os dados que precisamos
     return {
       latitude: city.latitude,
       longitude: city.longitude,
@@ -41,90 +79,70 @@ const WheatherApp = () => {
     }
   }
 
-
-  // Pega o que o usuário está digitando
-  const handleInputChanges = (e) => {
-
-    setLocation(e.target.value)
-
-    console.log(location)
-  }
-
-
-  // Detecta quando o usuário aperta uma tecla
-  const handleKeyDown = (e) => {
-
-    // Se a tecla for Enter, faz a pesquisa
-    if (e.key === 'Enter') {
-      search(location)
-    }
-  }
-
-
-  // Faz a pesquisa do clima
   const search = async (cityName) => {
 
     try {
 
-      //1. Buscar as Coordenadas
-
+      // 1. Buscar Coordenadas
       const coordinates = await getCoordinates(cityName)
 
+      console.log("Coordenadas:")
+      console.log(coordinates)
 
-      //2. Pegar a latitude e longitude
-
+      // 2. Pegar Latitude e Longitude
       const { latitude, longitude } = coordinates
 
+      // 3. Montar URL do Clima
+      const url = `
+        https://api.open-meteo.com/v1/forecast
+        ?latitude=${latitude}
+        &longitude=${longitude}
+        &current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code
+        &timezone=auto
+      `.replace(/\s/g, '')
 
-      //3. Montar a URL da API de clima
-
-      const url = `https://api.open-meteo.com/v1/forecast?
-      latitude=${latitude}&
-      longitude=${longitude}&
-      current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m&
-      timezone=auto`.replace(/\s/g, '')
-
-
-      //4. Buscar Clima
-
+      // 4. Buscar clima
       const response = await fetch(url)
 
-      // Transforma a resposta em JSON
-      const data = await response.json()
+      const weatherData = await response.json()
 
+      const weatherInfo = getWeatherInfo(
+        weatherData.current.weather_code
+      )
 
       console.log('Clima:')
-      console.log(data)
+      console.log(weatherData)
 
-
-      //5. Salvar os dados obtidos pela API no estado data
-
+      // 5. Salvar os dados no estado data
       setData({
-        ...data.current,
-
+        ...weatherData.current,
         city: coordinates.name,
-
         country: coordinates.country,
-
-        // A API do Open-Meteo fornece o código do clima
-        weatherCode: data.current.weather_code
+        weatherType: weatherInfo.type,
+        weatherDescription: weatherInfo.description
       })
 
-
     } catch (error) {
-
-      console.log(error.message)
-
+      console.error(error.message)
     }
   }
 
-
-//ELEMENTOS QUE SÃO RENDERIZADOS
-
   return (
-    <div className="container">
 
-      <div className="weather-app">
+    <div
+      className="container"
+      style={{ backgroundImage }}
+    >
+
+      <div
+        className="weather-app"
+        style={{
+          backgroundImage:
+            backgroundImage && backgroundImage.replace
+              ? backgroundImage.replace('to right', 'to top')
+              : null,
+        }}
+      >
 
         <div className="search">
 
@@ -132,30 +150,22 @@ const WheatherApp = () => {
 
             <i className="fa-solid fa-location-dot"></i>
 
-            {/* Mostra a cidade pesquisada */}
             <div className="location">
               {data ? data.city : 'London'}
             </div>
 
           </div>
 
-
           <div className="search-bar">
 
             <input
               type="text"
-
               placeholder="Enter Location"
-
               value={location}
-
               onChange={handleInputChanges}
-
-              // Corrigido: era omKeyDown
               onKeyDown={handleKeyDown}
             />
 
-            {/* Lupa para pesquisar */}
             <i
               className="fa-solid fa-magnifying-glass"
               onClick={() => search(location)}
@@ -165,167 +175,101 @@ const WheatherApp = () => {
 
         </div>
 
+        <div className="weather">
 
-        {/* ============================
-            CLIMA
-        ============================ */}
+          {/* 6. Dinamizar a imagem de acordo com o clima */}
+          <img
+            src={
+              data
+                ? weatherImages[data.weatherType]
+                : sunny
+            }
+            alt={
+              data
+                ? data.weatherDescription
+                : 'Clear sky'
+            }
+          />
 
-        {data && (
-          <>
+          <div className="weather-type">
 
-            <div className="weather">
+            {data
+              ? data.weatherDescription
+              : 'Clear'
+            }
 
-              <img
-                src={sunny}
-                alt="Clear sky"
-              />
+          </div>
 
-              {/* Código do clima */}
-              <div className="weather-type">
-                Código: {data.weatherCode}
-              </div>
+          <div className="temp">
 
-              {/* Temperatura */}
-              <div className="temp">
-                {Math.round(data.temperature_2m)}°
-              </div>
+            {data
+              ? `${Math.floor(data.temperature_2m)}°`
+              : null
+            }
+
+          </div>
+
+        </div>
+
+        <div className="weather-date">
+
+          <p>
+
+            {data
+              ? formatDate(data.time)
+              : 'Sat, 15 Ago'
+            }
+
+          </p>
+
+        </div>
+
+        <div className="weather-data">
+
+          <div className="humidity">
+
+            <div className="data-name">
+              Humidity
+            </div>
+
+            <i className="fa-solid fa-droplet"></i>
+
+            <div className="data">
+
+              {data
+                ? `${data.relative_humidity_2m}%`
+                : '35%'
+              }
 
             </div>
 
+          </div>
 
-            {/* ============================
-                SENSAÇÃO TÉRMICA
-            ============================ */}
+          <div className="wind">
 
-            <div className="weather-date">
+            <div className="data-name">
+              Wind
+            </div>
 
-              <p>
-                Sensação térmica:{' '}
-                {Math.round(data.apparent_temperature)}°
-              </p>
+            <i className="fa-solid fa-wind"></i>
+
+            <div className="data">
+
+              {data
+                ? `${data.wind_speed_10m} km/h`
+                : '3 km/h'
+              }
 
             </div>
 
+          </div>
 
-            {/* ============================
-                UMIDADE E VENTO
-            ============================ */}
-
-            <div className="weather-data">
-
-              <div className="humidity">
-
-                <div className="data-name">
-                  Humidity
-                </div>
-
-                <i className="fa-solid fa-droplet"></i>
-
-                <div className="data">
-                  {data.relative_humidity_2m}%
-                </div>
-
-              </div>
-
-
-              <div className="wind">
-
-                <div className="data-name">
-                  Wind
-                </div>
-
-                <i className="fa-solid fa-wind"></i>
-
-                <div className="data">
-                  {data.wind_speed_10m} km/h
-                </div>
-
-              </div>
-
-            </div>
-
-
-            {/* ============================
-                CHUVA E PRECIPITAÇÃO
-            ============================ */}
-
-            <div className="weather-data">
-
-              <div className="humidity">
-
-                <div className="data-name">
-                  Rain
-                </div>
-
-                <i className="fa-solid fa-cloud-rain"></i>
-
-                <div className="data">
-                  {data.rain} mm
-                </div>
-
-              </div>
-
-
-              <div className="wind">
-
-                <div className="data-name">
-                  Precipitation
-                </div>
-
-                <i className="fa-solid fa-umbrella"></i>
-
-                <div className="data">
-                  {data.precipitation} mm
-                </div>
-
-              </div>
-
-            </div>
-
-
-            {/* ============================
-                DIREÇÃO E RAJADA DO VENTO
-            ============================ */}
-
-            <div className="weather-data">
-
-              <div className="humidity">
-
-                <div className="data-name">
-                  Wind Direction
-                </div>
-
-                <i className="fa-solid fa-compass"></i>
-
-                <div className="data">
-                  {data.wind_direction_10m}°
-                </div>
-
-              </div>
-
-
-              <div className="wind">
-
-                <div className="data-name">
-                  Wind Gusts
-                </div>
-
-                <i className="fa-solid fa-wind"></i>
-
-                <div className="data">
-                  {data.wind_gusts_10m} km/h
-                </div>
-
-              </div>
-
-            </div>
-
-          </>
-        )}
+        </div>
 
       </div>
 
     </div>
+
   )
 }
 
